@@ -12,8 +12,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/PaesslerAG/gval"
-	"github.com/PaesslerAG/jsonpath"
+	"github.com/yalp/jsonpath"
 )
 
 // Config the plugin configuration.
@@ -28,7 +27,7 @@ func CreateConfig() *Config {
 
 // JSON2Redirect a Traefik plugin.
 type JSON2Redirect struct {
-	jsonPath gval.Evaluable
+	jsonPath jsonpath.FilterFunc
 	next     http.Handler
 }
 
@@ -39,7 +38,7 @@ type HTTPClient interface {
 
 // New creates a new Json2Redirect plugin.
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
-	jsonPath, err := jsonpath.New(config.JSONPath)
+	jsonPath, err := jsonpath.Prepare(config.JSONPath)
 	if err != nil {
 		return nil, err
 	}
@@ -75,14 +74,21 @@ func (c *JSON2Redirect) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	jsonPathResult, err := c.jsonPath.EvalString(context.Background(), jsonBody)
+	jsonPathResult, err := c.jsonPath(jsonBody)
 	if err != nil {
 		rw.WriteHeader(http.StatusNotFound)
 		_, _ = rw.Write([]byte(err.Error()))
 		return
 	}
 
-	redirectURL, err := url.Parse(jsonPathResult)
+	switch jsonPathResult.(type) {
+	default:
+		rw.WriteHeader(http.StatusNotFound)
+		return
+	case string:
+	}
+
+	redirectURL, err := url.Parse(jsonPathResult.(string))
 	if err != nil {
 		rw.WriteHeader(http.StatusNotFound)
 		_, _ = rw.Write([]byte(err.Error()))
