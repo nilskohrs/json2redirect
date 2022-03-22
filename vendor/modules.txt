@@ -1,3 +1,4 @@
-# github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
-## explicit
-github.com/yalp/jsonpath
+# k8s.io/client-go v0.23.5
+## explicit; go 1.16
+k8s.io/client-go/third_party/forked/golang/template
+k8s.io/client-go/util/jsonpath
