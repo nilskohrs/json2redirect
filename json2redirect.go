@@ -5,14 +5,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 
-	"k8s.io/client-go/util/jsonpath"
+	"github.com/spyzhov/ajson"
 )
 
 // Config the plugin configuration.
@@ -27,7 +26,7 @@ func CreateConfig() *Config {
 
 // JSON2Redirect a Traefik plugin.
 type JSON2Redirect struct {
-	jsonPath *jsonpath.JSONPath
+	jsonPath string
 	next     http.Handler
 }
 
@@ -38,13 +37,12 @@ type HTTPClient interface {
 
 // New creates a new Json2Redirect plugin.
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
-	jsonPath := jsonpath.New(config.JSONPath)
-	err := jsonPath.Parse(config.JSONPath)
+	_, err := ajson.ParseJSONPath(config.JSONPath)
 	if err != nil {
 		return nil, err
 	}
 
-	return &JSON2Redirect{jsonPath: jsonPath, next: next}, nil
+	return &JSON2Redirect{jsonPath: config.JSONPath, next: next}, nil
 }
 
 func (c *JSON2Redirect) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
@@ -67,27 +65,33 @@ func (c *JSON2Redirect) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	jsonBody := interface{}(nil)
-	err := json.Unmarshal(bodyBytes, &jsonBody)
+	root, err := ajson.Unmarshal(bodyBytes)
 	if err != nil {
 		rw.WriteHeader(http.StatusUnsupportedMediaType)
 		_, _ = rw.Write([]byte(err.Error()))
 		return
 	}
 
-	jsonPathResult, err := c.jsonPath.FindResults(jsonBody)
+	nodes, err := root.JSONPath(c.jsonPath)
 	if err != nil {
 		rw.WriteHeader(http.StatusNotFound)
 		_, _ = rw.Write([]byte(err.Error()))
 		return
 	}
 
-	if len(jsonPathResult) < 1 || !jsonPathResult[0][0].CanInterface() {
+	if len(nodes) != 1 {
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	redirectURL, err := url.Parse(jsonPathResult[0][0].Interface().(string))
+	stringResult, err := nodes[0].GetString()
+	if err != nil {
+		rw.WriteHeader(http.StatusNotFound)
+		_, _ = rw.Write([]byte(err.Error()))
+		return
+	}
+
+	redirectURL, err := url.Parse(stringResult)
 	if err != nil {
 		rw.WriteHeader(http.StatusNotFound)
 		_, _ = rw.Write([]byte(err.Error()))
