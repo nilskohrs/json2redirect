@@ -5,18 +5,19 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 
-	"github.com/spyzhov/ajson"
+	"github.com/mitchellh/pointerstructure"
 )
 
 // Config the plugin configuration.
 type Config struct {
-	JSONPath string `json:"jsonPath"`
+	Pointer string `json:"pointer"`
 }
 
 // CreateConfig creates the default plugin configuration.
@@ -26,8 +27,8 @@ func CreateConfig() *Config {
 
 // JSON2Redirect a Traefik plugin.
 type JSON2Redirect struct {
-	jsonPath string
-	next     http.Handler
+	pointer *pointerstructure.Pointer
+	next    http.Handler
 }
 
 // HTTPClient is a reduced interface for http.Client.
@@ -37,12 +38,12 @@ type HTTPClient interface {
 
 // New creates a new Json2Redirect plugin.
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
-	_, err := ajson.ParseJSONPath(config.JSONPath)
+	pointer, err := pointerstructure.Parse(config.Pointer)
 	if err != nil {
 		return nil, err
 	}
 
-	return &JSON2Redirect{jsonPath: config.JSONPath, next: next}, nil
+	return &JSON2Redirect{pointer: pointer, next: next}, nil
 }
 
 func (c *JSON2Redirect) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
@@ -64,34 +65,29 @@ func (c *JSON2Redirect) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		_, _ = rw.Write([]byte("Content encoding not supported"))
 		return
 	}
-
-	root, err := ajson.Unmarshal(bodyBytes)
+	jsonBody := interface{}(nil)
+	err := json.Unmarshal(bodyBytes, &jsonBody)
 	if err != nil {
 		rw.WriteHeader(http.StatusUnsupportedMediaType)
 		_, _ = rw.Write([]byte(err.Error()))
 		return
 	}
 
-	nodes, err := root.JSONPath(c.jsonPath)
+	result, err := c.pointer.Get(jsonBody)
 	if err != nil {
 		rw.WriteHeader(http.StatusNotFound)
 		_, _ = rw.Write([]byte(err.Error()))
 		return
 	}
 
-	if len(nodes) != 1 {
+	switch result.(type) {
+	default:
 		rw.WriteHeader(http.StatusNotFound)
 		return
+	case string:
 	}
 
-	stringResult, err := nodes[0].GetString()
-	if err != nil {
-		rw.WriteHeader(http.StatusNotFound)
-		_, _ = rw.Write([]byte(err.Error()))
-		return
-	}
-
-	redirectURL, err := url.Parse(stringResult)
+	redirectURL, err := url.Parse(result.(string))
 	if err != nil {
 		rw.WriteHeader(http.StatusNotFound)
 		_, _ = rw.Write([]byte(err.Error()))

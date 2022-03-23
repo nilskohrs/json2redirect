@@ -12,7 +12,7 @@ import (
 func TestShouldChangeHost(t *testing.T) {
 	cfg := json2redirect.CreateConfig()
 
-	cfg.JSONPath = "$.objects[0].redirect"
+	cfg.Pointer = "/objects/0/redirect"
 
 	ctx := context.Background()
 	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {

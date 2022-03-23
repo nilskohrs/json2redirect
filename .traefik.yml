@@ -6,4 +6,4 @@ import: github.com/nilskohrs/json2redirect
 summary: "Redirect to a url from the json response body"
 
 testData:
-  jsonPath: $.jsonpath
+  pointer: "/redirects/0/url"
